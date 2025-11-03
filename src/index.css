@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 40 100% 99%;
+    --foreground: 180 10% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 180 10% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 180 10% 20%;
+    --primary: 174 94% 40%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 174 94% 60%;
+    --secondary: 15 100% 64%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 30 60% 95%;
+    --muted-foreground: 180 10% 45%;
+    --accent: 162 100% 95%;
+    --accent-foreground: 174 94% 40%;
+    --peach: 27 100% 93%;
+    --mint: 162 100% 95%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 40% 90%;
+    --input: 30 40% 90%;
+    --ring: 174 94% 40%;
+    --radius: 1rem;
+    --shadow-soft: 0 4px 20px rgba(15, 191, 168, 0.08);
+    --shadow-glow: 0 8px 30px rgba(15, 191, 168, 0.15);
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 180 20% 8%;
+    --foreground: 40 100% 99%;
+    --card: 180 15% 12%;
+    --card-foreground: 40 100% 99%;
+    --popover: 180 15% 12%;
+    --popover-foreground: 40 100% 99%;
+    --primary: 174 94% 40%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 174 94% 60%;
+    --secondary: 15 100% 64%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 180 10% 20%;
+    --muted-foreground: 180 10% 65%;
+    --accent: 162 100% 20%;
+    --accent-foreground: 174 94% 60%;
+    --peach: 27 50% 30%;
+    --mint: 162 50% 20%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 40 100% 99%;
+    --border: 180 10% 25%;
+    --input: 180 10% 25%;
+    --ring: 174 94% 60%;
+  }
+}
+
+/* Custom cursor */
+* {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%230FBFA8' stroke-width='2'%3E%3Cpath d='M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7'/%3E%3C/svg%3E"), auto;
+}
+
+button, a, [role="button"] {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='%230FBFA8'%3E%3Ccircle cx='12' cy='12' r='10' opacity='0.2'/%3E%3Cpath d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z' fill='%230FBFA8'/%3E%3Ccircle cx='12' cy='12' r='4' fill='white'/%3E%3C/svg%3E"), pointer !important;
+}
+
+/* Smooth rounded design */
+.card-rounded {
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-soft);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-rounded:hover {
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
