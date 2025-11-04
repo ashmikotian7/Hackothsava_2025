@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface MenuItem {
-  id: string;
+  id: number | string;
   name: string;
   price: number;
+  session?: string;
+  day?: string;
 }
 
 interface MealSection {
@@ -21,154 +23,172 @@ interface WeeklyMenu {
   [key: string]: MealSection;
 }
 
-interface EmployeeOrder {
-  itemName: string;
-  count: number;
-}
-
-const DAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MEAL_TIMES = [
-  { key: "breakfast", label: "Breakfast", emoji: "🌅", time: "Morning" },
-  { key: "lunch", label: "Lunch", emoji: "☀️", time: "Afternoon" },
-  { key: "snacks", label: "Snacks", emoji: "🌇", time: "Evening" },
+  { key: "breakfast", label: "Breakfast", emoji: "🌅", session: "morning" },
+  { key: "lunch", label: "Lunch", emoji: "☀️", session: "afternoon" },
+  { key: "snacks", label: "Snacks", emoji: "🌇", session: "evening" },
 ];
 
-const safeId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10));
+const safeId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2, 10);
 
-const initialMenu: WeeklyMenu = DAYS.reduce((acc, day) => {
-  acc[day] = {
-    breakfast: [{ id: safeId(), name: "Idli Sambar", price: 40 }],
-    lunch: [{ id: safeId(), name: "Paneer Butter Masala", price: 120 }],
-    snacks: [{ id: safeId(), name: "Samosa", price: 25 }],
-  };
-  return acc;
-}, {} as WeeklyMenu);
-
-export default function DashboardSection() {
-  const [weeklyMenu, setWeeklyMenu] = useState<WeeklyMenu>(initialMenu);
-  const [showSparkle, setShowSparkle] = useState(false);
+export default function AdminDashboard() {
+  const [weeklyMenu, setWeeklyMenu] = useState<WeeklyMenu>({});
+  const [loading, setLoading] = useState(true);
   const [chefReaction, setChefReaction] = useState("👨‍🍳");
-  const [employeeOrders, setEmployeeOrders] = useState<EmployeeOrder[]>([]);
+  const [showSparkle, setShowSparkle] = useState(false);
 
-  // Load from localStorage on mount
+  // Fetch menu from backend
+  const fetchMenu = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/dashboard/list/");
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        const structured: WeeklyMenu = DAYS.reduce((acc, day) => {
+          acc[day] = { breakfast: [], lunch: [], snacks: [] };
+          return acc;
+        }, {} as WeeklyMenu);
+
+        data.forEach((item) => {
+          const mealKey =
+            item.session === "morning"
+              ? "breakfast"
+              : item.session === "afternoon"
+              ? "lunch"
+              : "snacks";
+
+          if (structured[item.day]) {
+            structured[item.day][mealKey].push({
+              id: item.id,
+              name: item.name,
+              price: parseFloat(item.price),
+              day: item.day,
+              session: item.session,
+            });
+          }
+        });
+
+        setWeeklyMenu(structured);
+      } else {
+        setWeeklyMenu({});
+      }
+    } catch (err) {
+      console.error("Fetch menu error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const savedMenu = localStorage.getItem("weeklyMenu");
-    if (savedMenu) {
-      try { setWeeklyMenu(JSON.parse(savedMenu)); } catch {}
-    }
-
-    // Load employee orders summary
-    const savedOrders = localStorage.getItem("employeeOrders");
-    if (savedOrders) {
-      try {
-        const orders = JSON.parse(savedOrders);
-        const summary = aggregateOrders(orders);
-        setEmployeeOrders(summary);
-      } catch {}
-    }
+    fetchMenu();
   }, []);
 
-  // Save to localStorage whenever menu changes
-  useEffect(() => {
-    localStorage.setItem("weeklyMenu", JSON.stringify(weeklyMenu));
-  }, [weeklyMenu]);
-
-  const aggregateOrders = (orders: any[]): EmployeeOrder[] => {
-    const getCutoff = (forDateStr: string) => {
-      const target = new Date(forDateStr);
-      if (isNaN(target.getTime())) return null;
-      const cutoff = new Date(target);
-      cutoff.setDate(target.getDate() - 1);
-      cutoff.setHours(21, 0, 0, 0); // 9 PM local time previous day
-      return cutoff;
-    };
-
-    const counts: { [key: string]: number } = {};
-    for (const order of orders || []) {
-      const itemName = order?.itemName || order?.item;
-      if (!itemName) continue;
-
-      const forDateStr: string | undefined = order?.forDate || order?.date;
-      const canceled: boolean = Boolean(order?.canceled) || order?.status === "canceled";
-      const canceledAtStr: string | undefined = order?.canceledAt || order?.updatedAt;
-
-      // If cancelled and cancellation happened before or at the cutoff, skip counting it
-      if (canceled && forDateStr && canceledAtStr) {
-        const cutoff = getCutoff(forDateStr);
-        const canceledAt = new Date(canceledAtStr);
-        if (cutoff && !isNaN(canceledAt.getTime()) && canceledAt <= cutoff) {
-          continue;
-        }
-      }
-
-      const qty = Number(order?.qty);
-      counts[itemName] = (counts[itemName] || 0) + (Number.isFinite(qty) && qty > 0 ? qty : 1);
-    }
-
-    return Object.entries(counts).map(([itemName, count]) => ({ itemName, count }));
-  };
-
-  const addItem = (day: string, mealType: string) => {
-    setWeeklyMenu((prev) => ({
-      ...prev,
-      [day]: {
-        ...prev[day],
-        [mealType]: [
-          ...prev[day][mealType as keyof MealSection],
-          { id: safeId(), name: "New Item", price: 0 },
-        ],
-      },
-    }));
-    celebrateAction("✨");
-  };
-
-  const deleteItem = (day: string, mealType: string, itemId: string) => {
-    setWeeklyMenu((prev) => ({
-      ...prev,
-      [day]: {
-        ...prev[day],
-        [mealType]: prev[day][mealType as keyof MealSection].filter((item) => item.id !== itemId),
-      },
-    }));
-    celebrateAction("🗑️");
-  };
-
-  const updateItem = (
-    day: string,
-    mealType: string,
-    itemId: string,
-    field: "name" | "price",
-    value: string | number
-  ) => {
-    setWeeklyMenu((prev) => ({
-      ...prev,
-      [day]: {
-        ...prev[day],
-        [mealType]: prev[day][mealType as keyof MealSection].map((item) =>
-          item.id === itemId ? { ...item, [field]: value } : item
-        ),
-      },
-    }));
-  };
-
+  // Celebrate small action
   const celebrateAction = (emoji: string) => {
     setShowSparkle(true);
     setChefReaction(emoji);
     setTimeout(() => {
       setShowSparkle(false);
       setChefReaction("👨‍🍳");
-    }, 1500);
+    }, 1200);
   };
 
-  // insights removed
+  // Add item → POST
+  const addItem = async (day: string, mealType: string) => {
+    const meal = MEAL_TIMES.find((m) => m.key === mealType);
+    if (!meal) return;
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/dashboard/add/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          day,
+          session: meal.session,
+          name: "New Item",
+          price: "0.00",
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        await fetchMenu(); // refresh menu
+        celebrateAction("✨");
+      } else {
+        console.error("Add item failed:", data);
+      }
+    } catch (err) {
+      console.error("Add item error:", err);
+    }
+  };
+
+  // Delete item → DELETE
+  const deleteItem = async (itemId: number | string) => {
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:8000/api/dashboard/delete/${itemId}/`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        await fetchMenu();
+        celebrateAction("🗑️");
+      } else {
+        console.error("Delete failed:", data);
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+    }
+  };
+
+  // Update item → PUT
+  const updateItem = async (
+    day: string,
+    mealType: string,
+    item: MenuItem,
+    field: "name" | "price",
+    value: string | number
+  ) => {
+    const meal = MEAL_TIMES.find((m) => m.key === mealType);
+    if (!meal) return;
+
+    const updatedItem = { ...item, [field]: value };
+
+    setWeeklyMenu((prev) => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        [mealType]: prev[day][mealType as keyof MealSection].map((i) =>
+          i.id === item.id ? { ...i, [field]: value } : i
+        ),
+      },
+    }));
+
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:8000/api/dashboard/edit/${item.id}/`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: field === "name" ? value : item.name,
+            price: field === "price" ? Number(value) : item.price,
+            session: meal.session,
+            day,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) console.error("Update failed:", data);
+    } catch (err) {
+      console.error("Update error:", err);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 sm:p-8">
@@ -205,27 +225,30 @@ export default function DashboardSection() {
         <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent mb-2">
           Chef Dashboard
         </h1>
-        <p className="text-muted-foreground text-lg">Plan your weekly menu with joy • Karmic Canteen 🍽️</p>
+        <p className="text-muted-foreground text-lg">
+          Plan your weekly menu • Karmic Canteen 🍽️
+        </p>
       </motion.div>
 
-      {/* Weekly Insights removed */}
-
-      {/* Weekly Menu Carousel */}
-      <div className="mb-12">
-        <h2 className="text-2xl font-bold text-foreground mb-6 text-center">Weekly Menu</h2>
-        <div className="overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide">
+      {/* Menu */}
+      {loading ? (
+        <p className="text-center text-muted-foreground">Loading menu...</p>
+      ) : (
+        <div className="overflow-x-auto pb-4 snap-x snap-mandatory">
           <div className="flex gap-6 px-4 min-w-max">
-            {DAYS.map((day, dayIndex) => (
+            {DAYS.map((day, i) => (
               <motion.div
                 key={day}
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: dayIndex * 0.1 }}
+                transition={{ delay: i * 0.1 }}
                 className="snap-center"
               >
-                <Card className="w-[340px] sm:w-[380px] bg-card border border-border shadow hover:shadow-lg transition-shadow duration-300">
+                <Card className="w-[340px] sm:w-[380px] bg-card border shadow hover:shadow-lg transition-shadow">
                   <CardHeader className="bg-primary rounded-t-xl">
-                    <CardTitle className="text-primary-foreground text-center text-2xl">{day}</CardTitle>
+                    <CardTitle className="text-primary-foreground text-center text-2xl">
+                      {day}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="p-6 space-y-6">
                     {MEAL_TIMES.map((meal) => (
@@ -233,13 +256,12 @@ export default function DashboardSection() {
                         <div className="flex items-center gap-2 mb-3">
                           <span className="text-2xl">{meal.emoji}</span>
                           <div>
-                            <h3 className="font-semibold text-foreground">{meal.label}</h3>
-                            <p className="text-xs text-muted-foreground">{meal.time}</p>
+                            <h3 className="font-semibold">{meal.label}</h3>
                           </div>
                         </div>
                         <div className="space-y-2">
                           <AnimatePresence mode="popLayout">
-                            {weeklyMenu[day][meal.key as keyof MealSection].map((item) => (
+                            {weeklyMenu[day]?.[meal.key]?.map((item) => (
                               <motion.div
                                 key={item.id}
                                 layout
@@ -250,24 +272,26 @@ export default function DashboardSection() {
                               >
                                 <Input
                                   value={item.name}
-                                  onChange={(e) => updateItem(day, meal.key, item.id, "name", e.target.value)}
+                                  onChange={(e) =>
+                                    updateItem(day, meal.key, item, "name", e.target.value)
+                                  }
                                   className="flex-1 border-0 bg-transparent text-sm focus-visible:ring-1"
-                                  placeholder="Item name"
                                 />
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-muted-foreground">₹</span>
                                   <Input
                                     type="number"
                                     value={item.price}
-                                    onChange={(e) => updateItem(day, meal.key, item.id, "price", Number(e.target.value))}
+                                    onChange={(e) =>
+                                      updateItem(day, meal.key, item, "price", Number(e.target.value))
+                                    }
                                     className="w-20 border-0 bg-transparent text-sm focus-visible:ring-1"
-                                    placeholder="0"
                                   />
                                 </div>
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  onClick={() => deleteItem(day, meal.key, item.id)}
+                                  onClick={() => deleteItem(item.id)}
                                   className="h-8 w-8 text-destructive hover:bg-destructive/10"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -281,8 +305,7 @@ export default function DashboardSection() {
                             onClick={() => addItem(day, meal.key)}
                             className="w-full border-dashed hover:bg-primary/10 hover:border-primary"
                           >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Item
+                            <Plus className="h-4 w-4 mr-2" /> Add Item
                           </Button>
                         </div>
                       </div>
@@ -293,47 +316,7 @@ export default function DashboardSection() {
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Employee Orders Summary */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-4xl mx-auto"
-      >
-        <Card className="bg-card border border-border shadow">
-          <CardHeader className="bg-secondary rounded-t-xl">
-            <CardTitle className="text-secondary-foreground text-center flex items-center justify-center gap-2">
-              <Save className="h-6 w-6" />
-              Employee Orders Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            {employeeOrders.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                No orders yet. Orders will appear here once employees start ordering! 📝
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {employeeOrders.map((order, index) => (
-                  <motion.div
-                    key={order.itemName}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-secondary/30 rounded-lg p-4 flex items-center justify-between"
-                  >
-                    <span className="font-medium text-foreground">{order.itemName}</span>
-                    <span className="bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-bold">
-                      {order.count}
-                    </span>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
+      )}
     </div>
   );
 }
